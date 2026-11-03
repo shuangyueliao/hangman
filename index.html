@@ -1,0 +1,686 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="description" content="Word Gallows — classic hangman word guessing on a chalkboard. 400 words in three difficulties, hand-drawn chalk art. Free HTML5 game.">
+<title>Word Gallows · Hangman Word Game</title>
+<script>
+// 平台 SDK 按域名条件加载（独立运行时完全不加载，游戏行为不变）
+(function () {
+  var host = location.hostname || "";
+  try {
+    if (host.indexOf("crazygames") !== -1) {
+      var s1 = document.createElement("script");
+      s1.src = "https://sdk.crazygames.com/crazygames-sdk-v3.js";
+      s1.onload = function () {
+        if (window.CrazyGames && window.CrazyGames.SDK) {
+          window.CrazyGames.SDK.init().then(function () {
+            try { window.CrazyGames.SDK.game.loadingStart(); } catch (e) {}
+            window.addEventListener("load", function () { try { window.CrazyGames.SDK.game.loadingStop(); } catch (e) {} });
+          }).catch(function () {});
+        }
+      };
+      document.head.appendChild(s1);
+      window.__portal = "crazygames";
+    } else if (host.indexOf("gamedistribution") !== -1 || host.indexOf("html5.gamedistribution.com") !== -1 || host.indexOf("gd.games") !== -1) {
+      var s2 = document.createElement("script");
+      s2.src = "https://sdk.gamedistribution.com/v2/main.min.js";
+      document.head.appendChild(s2);
+      window.__portal = "gamedistribution";
+    }
+  } catch (e) {}
+})();
+</script>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html,body { height:100%; overflow:hidden; background:#101a14; font-family:Georgia,"Times New Roman",serif; }
+  #wrap { height:100%; display:flex; flex-direction:column; align-items:center; justify-content:center; }
+  #hud { width:100%; max-width:520px; display:flex; justify-content:space-between; align-items:center; padding:8px 12px 4px; color:#e9e4d4; }
+  .stat { text-align:center; }
+  .stat .label { font-size:10px; color:#8fa392; letter-spacing:1px; }
+  .stat .val { font-size:19px; font-weight:700; }
+  #title { font-size:13px; font-weight:700; color:#e9e4d4; letter-spacing:3px; opacity:.85; }
+  #hudBtns { display:flex; gap:6px; }
+  .hudBtn { background:transparent; border:1px solid rgba(233,228,212,.4); color:#e9e4d4; border-radius:8px; font-size:10px; padding:6px 7px; cursor:pointer; letter-spacing:1px; font-family:inherit; touch-action:manipulation; }
+  .hudBtn:active { transform:scale(.96); }
+  #stage { position:relative; }
+  canvas { display:block; border-radius:10px; touch-action:none; width:auto; height:auto; max-width:min(480px,96vw); max-height:50vh; background:#20402f; }
+  #kbd { width:100%; max-width:520px; padding:8px 8px 2px; }
+  .krow { display:flex; justify-content:center; gap:5px; margin-bottom:5px; }
+  .key { flex:1 1 0; max-width:46px; height:44px; background:rgba(233,228,212,.07); border:1px solid rgba(233,228,212,.35); border-radius:8px; color:#e9e4d4; font-size:17px; font-weight:700; font-family:inherit; cursor:pointer; touch-action:manipulation; user-select:none; -webkit-user-select:none; }
+  .key:active { background:rgba(233,228,212,.22); }
+  .key.hit { background:rgba(240,220,120,.22); border-color:rgba(240,220,120,.8); color:#f5e6a8; }
+  .key.miss { opacity:.32; text-decoration:line-through; }
+  .key:disabled { cursor:default; }
+  #overlay { position:absolute; inset:0; display:none; align-items:center; justify-content:center; background:rgba(8,14,10,.8); border-radius:10px; z-index:5; }
+  #panel { background:#1a2e23; border:1px solid rgba(233,228,212,.3); border-radius:16px; padding:22px 28px; text-align:center; color:#e9e4d4; max-width:88%; max-height:94%; overflow-y:auto; }
+  #panel h2 { font-size:23px; margin-bottom:6px; letter-spacing:2px; }
+  #panel p { color:#b8c4b4; font-size:13px; margin-bottom:10px; line-height:1.5; }
+  #panel .wordLine { font-size:19px; color:#fff; margin:6px 0 2px; letter-spacing:1px; }
+  #panel .wordLine .cat { font-size:12px; color:#9fb8a5; letter-spacing:1px; }
+  #panel .gloss { font-style:italic; margin-bottom:10px; }
+  #panel .final { font-size:31px; font-weight:700; color:#f5e6a8; margin:6px 0 10px; }
+  #panel .mini { font-size:11px; color:#8fa392; letter-spacing:1px; margin-bottom:10px; }
+  #panel button.big { display:block; width:100%; margin:8px 0; background:rgba(233,228,212,.12); border:1px solid rgba(233,228,212,.5); color:#e9e4d4; border-radius:10px; padding:11px 20px; font-size:15px; font-weight:700; letter-spacing:1px; cursor:pointer; font-family:inherit; touch-action:manipulation; }
+  #panel button.big:active { transform:scale(.98); }
+  #footer { color:#5e7263; font-size:11px; padding:6px; letter-spacing:1px; }
+  @media (max-width:400px) { #title { display:none; } .key { height:40px; font-size:15px; } }
+</style>
+</head>
+<body>
+<div id="wrap">
+  <div id="hud">
+    <div class="stat"><div class="label">SCORE</div><div class="val" id="score">0</div></div>
+    <div id="title">WORD GALLOWS</div>
+    <div class="stat"><div class="label">STREAK</div><div class="val" id="streak">0</div></div>
+    <div class="stat"><div class="label">BEST</div><div class="val" id="best">0</div></div>
+    <div id="hudBtns">
+      <button class="hudBtn" id="menuBtn">MENU</button>
+      <button class="hudBtn" id="muteBtn">SOUND ON</button>
+    </div>
+  </div>
+  <div id="stage">
+    <canvas id="game"></canvas>
+    <div id="overlay"><div id="panel"></div></div>
+  </div>
+  <div id="kbd"></div>
+  <div id="footer">Word Gallows — a free word game</div>
+</div>
+<script>
+"use strict";
+// ============ 词库（word|类别码|释义提示；分号分隔） ============
+var CATS = { a:"ANIMAL", f:"FOOD", p:"PLACE", o:"OBJECT", v:"ACTION", n:"NATURE", b:"BODY", j:"JOB", s:"SPORT", m:"MUSIC", c:"CLOTHING", w:"WEATHER", e:"FEELING", l:"COLOR", t:"SCHOOL" };
+var RAW = [
+// ---- Easy：4-5 字母 150 词 ----
+"crane|a|a wading bird with long legs;colt|a|a young horse;lion|a|a big wild cat with a shaggy mane;bear|a|a big furry animal that loves honey;wolf|a|a wild pack hunter that howls at night;frog|a|a hopping pond animal with a long tongue;bird|a|a feathered animal that flies and sings;fish|a|a swimmer with fins and gills;duck|a|a water bird that says quack;goat|a|a farm animal that climbs and eats everything" +
+";cake|f|a sweet baked treat for parties;rice|f|a grain that feeds half the world;bread|f|a baked staple made from flour;apple|f|a crisp round tree fruit;grape|f|a small juicy fruit that grows in bunches;lemon|f|a sour yellow citrus fruit;melon|f|a big sweet summer fruit;peach|f|a soft fruit with fuzzy skin;mango|f|a sweet golden tropical fruit;pizza|f|a cheesy baked pie with toppings" +
+";park|p|a public green space for play;beach|p|a sandy shore beside the sea;river|p|flowing water that runs to the sea;ocean|p|the vast salty sea;house|p|a building where a family lives;hotel|p|a place for travelers to sleep;farm|p|land where crops and animals are raised;barn|p|a farm building for hay and animals;cave|p|a hollow chamber in rock or a hill;lake|p|a body of water surrounded by land" +
+";chair|o|a seat with a backrest;table|o|furniture with a flat top;lamp|o|a device that gives light;phone|o|a device used to make calls;clock|o|a device that shows the time;book|o|bound pages you read;spoon|o|a utensil for soup;knife|o|a blade for cutting food;plate|o|a flat dish for serving food;watch|o|a small clock worn on the wrist" +
+";jump|v|leap off the ground;walk|v|move along on foot;swim|v|move through water;sing|v|make music with your voice;dance|v|move your body to the rhythm;write|v|put words down on paper;read|v|look at words and understand them;draw|v|make a picture with a pencil;cook|v|prepare food with heat;laugh|v|react to something funny" +
+";rain|n|water falling from the clouds;snow|n|soft white flakes of winter;wind|n|air that moves and blows;storm|n|violent weather with wind and rain;cloud|n|a drifting shape in the sky;moon|n|the pale light of the night sky;star|n|a faraway point of light;tree|n|a tall plant with a woody trunk;leaf|n|the green part of a plant;stone|n|a small piece of rock" +
+";hand|b|the body part you grab with;foot|b|the body part you stand on;nose|b|the organ of smell;mouth|b|where food and words come out;head|b|the top part that holds the brain;hair|b|what grows on top of the head;face|b|the front of the head;knee|b|the joint in the middle of the leg;heart|b|the organ that pumps blood;brain|b|the organ that does the thinking" +
+";chef|j|a professional cook;nurse|j|a caregiver who aids the doctor;pilot|j|a person who flies planes;baker|j|a person who makes bread;judge|j|the one who decides a court case;actor|j|a performer in films or plays;guard|j|a person who keeps watch;clerk|j|an office worker who keeps records;coach|j|a trainer who leads a team;mayor|j|the elected head of a town" +
+";golf|s|a game of clubs and little holes;chess|s|a board game of kings and knights;skate|s|to glide on ice or wheels;hike|s|a long walk in the hills;yoga|s|stretching poses for body and mind;relay|s|a track race with team handoffs;rugby|s|a rough oval-ball field game;darts|s|a pub game of tiny thrown arrows;surf|s|to ride waves on a board;sled|s|a ride that slides over snow" +
+";piano|m|an instrument with eighty-eight keys;drums|m|instruments you strike with sticks;flute|m|a wind pipe you blow across;opera|m|a drama sung on stage;choir|m|a group of singers;band|m|musicians who play together;song|m|words set to music;tune|m|a melody you can hum;bass|m|the deep low part of the music;jazz|m|loose improvised American music" +
+";shirt|c|a top with a collar or buttons;pants|c|garments worn on the legs;dress|c|a one-piece garment for the body;skirt|c|a garment that flares from the waist;scarf|c|a neck wrap for cold days;glove|c|a covering for one hand;boots|c|sturdy footwear for rough weather;socks|c|soft wear for inside shoes;coat|c|a warm outer layer;jeans|c|trousers made of denim" +
+";sunny|w|bright with sunshine;windy|w|with lots of moving air;foggy|w|hard to see through the mist;humid|w|heavy with moisture;warm|w|pleasantly hot;mild|w|neither hot nor cold;damp|w|slightly wet;chill|w|a light layer of cold;frost|w|ice crystals on a cold morning;sleet|w|rain mixed with falling snow" +
+";happy|e|full of joy;angry|e|feeling mad or furious;glad|e|pleased and content;calm|e|peaceful and still;proud|e|pleased with what you did;brave|e|not afraid of danger;eager|e|excited and ready to go;jolly|e|cheerful and festive;merry|e|full of fun and laughter;lucky|e|favored by good fortune" +
+";blue|l|the color of the sky;green|l|the color of fresh grass;black|l|the darkest color;white|l|the color of fresh snow;brown|l|the color of rich earth;pink|l|a pale shade of red;gold|l|the color of shining riches;coral|l|a pinkish orange shade;ivory|l|a soft creamy white;teal|l|a blue-green shade" +
+";math|t|the subject of numbers and shapes;exam|t|a big formal test;quiz|t|a short quick test;class|t|a group of students together;chalk|t|a teachers white writing stick;grade|t|the mark you get on your work;tutor|t|a private teacher;essay|t|a short written composition;notes|t|the words you jot down to remember;study|t|to review your lessons",
+// ---- Medium：6-8 字母 150 词 ----
+"monkey|a|a playful tree climber;rabbit|a|a long-eared hopper;parrot|a|a bright bird that can talk;turtle|a|a slow reptile with a shell;dolphin|a|a clever leaping sea mammal;penguin|a|a tuxedo bird that swims;octopus|a|a clever eight-armed sea animal;lobster|a|a shellfish with big claws;giraffe|a|the tallest animal with a long neck;cheetah|a|the fastest land runner" +
+";banana|f|a long yellow fruit;orange|f|a round citrus full of juice;cherry|f|a small red fruit with a stem;tomato|f|a red salad fruit;potato|f|a starchy underground tuber;carrot|f|an orange root that rabbits love;pepper|f|a spicy or sweet pod;cheese|f|a food made from milk;butter|f|a golden spread for toast;pancake|f|a flat cake from a frying pan" +
+";island|p|land surrounded by water;desert|p|a dry sandy region;jungle|p|dense tropical forest;castle|p|a fortress where kings lived;museum|p|a place that displays treasures;market|p|where goods are bought and sold;bridge|p|a span that crosses a gap;canyon|p|a deep gorge carved by a river;valley|p|low land between hills;volcano|p|a mountain that can erupt" +
+";pencil|o|a wooden writing tool;camera|o|a device that takes photos;laptop|o|a portable computer;wallet|o|a folding case for money;umbrella|o|a folding canopy against rain;compass|o|a needle that points north;blanket|o|a warm cover for a bed;cushion|o|a soft pad for sitting;lantern|o|a portable lamp in a case;magnet|o|a stone that attracts iron" +
+";listen|v|pay attention with your ears;whisper|v|speak very softly;explain|v|make something clear;collect|v|gather things together;gather|v|bring things into one place;arrange|v|put things in order;examine|v|look at something closely;observe|v|watch carefully;invent|v|create something new;create|v|bring into existence" +
+";rainbow|n|colored arcs after the rain;thunder|n|the crash after lightning;climate|n|the long-term weather of a place;season|n|spring, summer, fall or winter;spring|n|the season of blossoms;summer|n|the warmest season;autumn|n|the season of falling leaves;winter|n|the coldest season;monsoon|n|a season of heavy rains;glacier|n|a slow river of ice" +
+";finger|b|one of five on each hand;shoulder|b|where the arm attaches;stomach|b|the organ that digests food;kidney|b|an organ that filters blood;muscle|b|tissue that moves the body;throat|b|the passage behind the mouth;eyebrow|b|the arch of hair above the eye;forearm|b|the arm between elbow and wrist;eyelash|b|a tiny hair over the eye;nostril|b|one of two nose openings" +
+";doctor|j|a medical professional;dentist|j|the one who fixes teeth;surgeon|j|a doctor who operates;farmer|j|one who grows crops;sailor|j|one who works on ships;artist|j|a maker of paintings;singer|j|a performer of songs;writer|j|one who writes books;driver|j|one who steers a vehicle;lawyer|j|one who argues cases in court" +
+";soccer|s|the world game of goals;tennis|s|a racket game on a court;hockey|s|a game of sticks and pucks;boxing|s|a sport of gloved fists;skiing|s|gliding down snowy slopes;rowing|s|propelling a boat with oars;sailing|s|riding the wind in a boat;cycling|s|riding a bicycle;archery|s|shooting arrows with a bow;karate|s|a Japanese martial art" +
+";guitar|m|a six-stringed instrument;violin|m|a bowed string instrument;trumpet|m|a bright brass instrument;chorus|m|the part everyone sings;melody|m|the main tune of a song;rhythm|m|the repeating beat of music;concert|m|a live music show;symphony|m|a grand work for an orchestra;octave|m|eight notes up the scale;ballad|m|a slow storytelling song" +
+";jacket|c|a short light coat;sweater|c|a knitted warm top;hoodie|c|a sweatshirt with a hood;blazer|c|a smart tailored jacket;slippers|c|soft shoes for indoors;sandals|c|open summer footwear;mittens|c|handwear with one big thumb;necklace|c|jewelry for the neck;bracelet|c|jewelry for the wrist;earring|c|jewelry for the ear" +
+";drizzle|w|light steady rain;breeze|w|a gentle wind;cloudy|w|covered with clouds;forecast|w|the predicted weather;heatwave|w|days of extreme heat;downpour|w|a heavy burst of rain;overcast|w|gray and cloud-covered;humidity|w|the moisture in the air;rainfall|w|the amount of rain that falls;sunshine|w|direct light from the sun" +
+";sorrow|e|deep sadness;misery|e|great unhappiness;anguish|e|severe emotional pain;despair|e|the loss of all hope;delight|e|great pleasure;wonder|e|astonished admiration;courage|e|strength in the face of fear;horror|e|intense fear or shock;terror|e|overwhelming fear;joyful|e|filled with happiness" +
+";silver|l|a shiny gray-white metal color;purple|l|a mix of red and blue;indigo|l|a deep blue between blue and violet;maroon|l|a dark brownish red;crimson|l|a strong deep red;scarlet|l|a brilliant bright red;violet|l|a soft purple;magenta|l|a vivid pinkish purple;bronze|l|a dull brownish gold;cobalt|l|a strong deep blue" +
+";recess|t|the school play break;lesson|t|a unit of teaching;subject|t|what a class teaches;scholar|t|a serious student of learning;diploma|t|a certificate of graduation;library|t|a building full of books;textbook|t|the standard book of a course;homework|t|assignments done at home;spelling|t|getting letters in the right order;science|t|the study of the natural world",
+// ---- Hard：9-12 字母 100 词 ----
+"crocodile|a|a giant river reptile with a long snout;alligator|a|a broad-snouted marsh reptile;chameleon|a|a lizard that changes color;orangutan|a|a great ape of the rainforest;hippopotamus|a|a huge river horse;rhinoceros|a|a thick-skinned giant with a horn;jellyfish|a|a drifting sea animal with stinging arms;swordfish|a|a fast ocean fish with a pointed bill;woodpecker|a|a bird that drills into trees;hummingbird|a|a tiny bird that hovers at flowers" +
+";pineapple|f|a spiky tropical fruit;strawberry|f|a heart-shaped red fruit;blueberry|f|a tiny dark-blue fruit;raspberry|f|a delicate red berry;watermelon|f|a huge fruit full of pink sweetness;pomegranate|f|a fruit packed with ruby seeds;grapefruit|f|a big tangy citrus;spaghetti|f|long thin Italian noodles;marshmallow|f|a soft squishy sugary treat;butterscotch|f|a rich brown-sugar candy" +
+";lighthouse|p|a tower that guides ships;skyscraper|p|a very tall city building;greenhouse|p|a glass house for growing plants;courthouse|p|where trials are held;observatory|p|a dome that watches the stars;planetarium|p|a theater of the night sky;conservatory|p|a glass hall for rare plants;peninsula|p|land nearly surrounded by water;boulevard|p|a wide tree-lined street;boardwalk|p|a wooden path by the shore" +
+";kaleidoscope|o|a tube of shifting colored patterns;microscope|o|a device for seeing tiny things;telescope|o|a device for seeing far things;binoculars|o|twin lenses for distant views;thermometer|o|a device that measures heat;stethoscope|o|a doctors listening tool;seismograph|o|a device that records earthquakes;gramophone|o|an old record player;typewriter|o|a machine that prints letters on paper;backgammon|o|a dice and checkers board game" +
+";celebrate|v|rejoice over a good thing;appreciate|v|recognize the worth of something;communicate|v|share information;coordinate|v|organize parts into one effort;collaborate|v|work together on a project;negotiate|v|bargain toward an agreement;articulate|v|express clearly in words;translate|v|render words in another language;calculate|v|work out with numbers;investigate|v|dig into the facts" +
+";atmosphere|n|the blanket of air around Earth;hemisphere|n|half of a globe;ecosystem|n|a community of living things;magnetism|n|the force that pulls iron;electricity|n|the power of moving charges;temperature|n|how hot or cold something is;acceleration|n|the rate of speeding up;resistance|n|the push against a flow;wavelength|n|the span of one wave cycle;thunderstorm|n|a storm of thunder and lightning" +
+";carpenter|j|a builder who works with wood;electrician|j|one who wires buildings;blacksmith|j|one who forges iron;locksmith|j|one who makes and opens locks;pharmacist|j|one who dispenses medicine;physician|j|a medical doctor;scientist|j|one who studies the world by method;astronomer|j|one who studies the stars;librarian|j|the keeper of the books;historian|j|one who studies the past" +
+";basketball|s|a game of hoops and dribbles;volleyball|s|a game of spikes over a net;triathlon|s|swim, bike and run in one race;taekwondo|s|a Korean art of high kicks;wrestling|s|grappling on a mat;gymnastics|s|flips, bars and balance beams;badminton|s|a racket game with a shuttlecock;racquetball|s|a walled court game with a rubber ball;skateboard|s|a board with four wheels for tricks;waterskiing|s|skiing while towed by a boat" +
+";saxophone|m|a golden reed horn;harmonica|m|a pocket mouth organ;accordion|m|a bellows-driven squeezebox;xylophone|m|wooden bars you strike;tambourine|m|a jingling hand drum;synthesizer|m|an electronic sound maker;vibraphone|m|metal bars with a tremolo;orchestra|m|a grand ensemble of many instruments;phonograph|m|an early machine that plays records;crescendo|m|a gradual swell of sound" +
+";contentment|e|quiet satisfaction;frustration|e|annoyance at being blocked;excitement|e|a thrilled stirred-up feeling;happiness|e|the state of being happy;loneliness|e|the ache of being alone;friendship|e|the bond between friends;leadership|e|the art of guiding others;scholarship|e|money awarded for study;confidence|e|belief in yourself;persistence|e|refusing to give up"
+];
+function parseTier(s) {
+  var out = [], arr = s.split(";");
+  for (var i = 0; i < arr.length; i++) {
+    var f = arr[i].split("|");
+    out.push({ w: f[0], c: f[1], g: f[2] });
+  }
+  return out;
+}
+var TIERS = [parseTier(RAW[0]), parseTier(RAW[1]), parseTier(RAW[2])];
+// 洗牌袋：避免短时间内重复出题
+function makeBag(tier) {
+  var pool = [];
+  return {
+    draw: function () {
+      if (!pool.length) { pool = []; for (var i = 0; i < TIERS[tier].length; i++) pool.push(i); }
+      var k = Math.floor(Math.random() * pool.length);
+      return TIERS[tier][pool.splice(k, 1)[0]];
+    }
+  };
+}
+var bags = [makeBag(0), makeBag(1), makeBag(2)];
+
+// ============ 基础状态 ============
+var W = 480, H = 560;
+var canvas = document.getElementById("game");
+var ctx = canvas.getContext("2d");
+var dpr = Math.min(window.devicePixelRatio || 1, 2);
+canvas.width = W * dpr; canvas.height = H * dpr;
+ctx.scale(dpr, dpr);
+
+var state = "MENU";          // MENU | PLAY | WON | LOST
+var tier = 0, lastTier = 0;
+var word = "", wordCat = "", wordGloss = "";
+var revealed = [];           // 每格 {on, rot}
+var missedReveal = [];       // 失败后揭示的字母（红色粉笔）
+var guessed = {};
+var misses = 0;              // 0..6
+var score = 0, streak = 0;
+var best = 0, bestStreak = 0, bestAtRunStart = 0, newBestRun = false;
+var runActive = false;
+var lastGain = 0, loseT = 0;
+var muted = false;
+try { best = parseInt(localStorage.getItem("wg_best") || "0", 10) || 0; } catch (e) {}
+try { bestStreak = parseInt(localStorage.getItem("wg_streak") || "0", 10) || 0; } catch (e) {}
+try { muted = localStorage.getItem("wg_mute") === "1"; } catch (e) {}
+
+var scoreEl = document.getElementById("score");
+var streakEl = document.getElementById("streak");
+var bestEl = document.getElementById("best");
+var overlay = document.getElementById("overlay");
+var panel = document.getElementById("panel");
+var kbdEl = document.getElementById("kbd");
+var muteBtn = document.getElementById("muteBtn");
+var menuBtn = document.getElementById("menuBtn");
+
+function now() { return (typeof performance !== "undefined" && performance.now) ? performance.now() : Date.now(); }
+function rnd(a, b) { return a + Math.random() * (b - a); }
+
+// ============ 粉笔绘制 ============
+var CHALK = "243,239,228";
+// 把一条线段抖动成手绘多段折线（预生成，避免每帧抖动）
+function jitterLine(x1, y1, x2, y2) {
+  var pts = [], n = 6, dx = x2 - x1, dy = y2 - y1;
+  var len = Math.sqrt(dx * dx + dy * dy) || 1, nx = -dy / len, ny = dx / len;
+  for (var i = 0; i <= n; i++) {
+    var t = i / n, o = (i === 0 || i === n) ? rnd(-0.6, 0.6) : rnd(-2, 2);
+    pts.push([x1 + dx * t + nx * o, y1 + dy * t + ny * o]);
+  }
+  return pts;
+}
+function jitterCircle(cx, cy, r) {
+  var pts = [], n = 26;
+  for (var i = 0; i <= n; i++) {
+    var a = (i / n) * Math.PI * 2 - Math.PI / 2, rr = r + rnd(-1.3, 1.3);
+    pts.push([cx + Math.cos(a) * rr, cy + Math.sin(a) * rr]);
+  }
+  return pts;
+}
+// 按 progress 沿折线描画（描画动画）
+function drawChalkPts(c, pts, width, alpha, progress) {
+  var total = 0, segs = [], i, d;
+  for (i = 1; i < pts.length; i++) {
+    d = Math.sqrt((pts[i][0] - pts[i-1][0]) * (pts[i][0] - pts[i-1][0]) + (pts[i][1] - pts[i-1][1]) * (pts[i][1] - pts[i-1][1]));
+    segs.push(d); total += d;
+  }
+  var budget = total * (progress === undefined ? 1 : Math.max(0, progress));
+  c.strokeStyle = "rgba(" + CHALK + "," + alpha + ")";
+  c.lineWidth = width; c.lineCap = "round"; c.lineJoin = "round";
+  c.beginPath();
+  c.moveTo(pts[0][0], pts[0][1]);
+  var used = 0;
+  for (i = 1; i < pts.length; i++) {
+    var seg = segs[i - 1];
+    if (used + seg <= budget) { c.lineTo(pts[i][0], pts[i][1]); used += seg; }
+    else {
+      var t = (budget - used) / (seg || 1);
+      c.lineTo(pts[i-1][0] + (pts[i][0] - pts[i-1][0]) * t, pts[i-1][1] + (pts[i][1] - pts[i-1][1]) * t);
+      break;
+    }
+  }
+  c.stroke();
+}
+function strokeChalk(c, pts, progress) {
+  drawChalkPts(c, pts, 3.2, 0.55, progress);
+  drawChalkPts(c, pts, 5.6, 0.15, progress);
+}
+
+// 黑板底纹（离屏预渲染一次）
+var off = document.createElement("canvas");
+off.width = W * dpr; off.height = H * dpr;
+var offCtx = off.getContext("2d");
+offCtx.scale(dpr, dpr);
+(function paintBoard(c) {
+  c.fillStyle = "#20402f";
+  c.fillRect(0, 0, W, H);
+  for (var i = 0; i < 900; i++) {
+    c.fillStyle = Math.random() < 0.5 ? "rgba(255,255,255,.022)" : "rgba(0,0,0,.05)";
+    c.fillRect(Math.random() * W, Math.random() * H, rnd(1, 2.4), rnd(1, 2.4));
+  }
+  for (var s = 0; s < 14; s++) {
+    c.save();
+    c.translate(rnd(0, W), rnd(0, H));
+    c.rotate(rnd(0, Math.PI));
+    c.fillStyle = "rgba(255,255,255,.018)";
+    c.beginPath();
+    c.ellipse(0, 0, rnd(30, 90), rnd(8, 22), 0, 0, Math.PI * 2);
+    c.fill();
+    c.restore();
+  }
+  var g = c.createRadialGradient(W / 2, H / 2, H / 3, W / 2, H / 2, H * 0.75);
+  g.addColorStop(0, "rgba(0,0,0,0)");
+  g.addColorStop(1, "rgba(0,0,0,.28)");
+  c.fillStyle = g; c.fillRect(0, 0, W, H);
+  // 木框
+  c.strokeStyle = "#6e4a2c"; c.lineWidth = 14;
+  c.strokeRect(3, 3, W - 6, H - 6);
+  c.strokeStyle = "rgba(255,255,255,.08)"; c.lineWidth = 1;
+  c.strokeRect(10.5, 10.5, W - 21, H - 21);
+})(offCtx);
+
+// ============ 绞架与小人（6 笔 = 6 次错误） ============
+var GALLOWS = [
+  jitterLine(70, 310, 310, 310),   // 地面
+  jitterLine(120, 310, 120, 80),   // 立柱
+  jitterLine(120, 80, 250, 80),    // 横梁
+  jitterLine(120, 122, 168, 80),   // 支撑
+  jitterLine(250, 80, 250, 106)    // 绳子
+];
+function figureStrokes() {
+  return [
+    jitterCircle(250, 130, 22),      // 1 头
+    jitterLine(250, 152, 250, 224),  // 2 身体
+    jitterLine(250, 166, 218, 195),  // 3 左臂
+    jitterLine(250, 166, 282, 195),  // 4 右臂
+    jitterLine(250, 224, 227, 268),  // 5 左腿
+    jitterLine(250, 224, 273, 268)   // 6 右腿
+  ];
+}
+var MENUFIG = figureStrokes();
+// 失败表情（装饰，不算笔画）
+var FACE = [
+  jitterLine(236, 120, 244, 128), jitterLine(244, 120, 236, 128),
+  jitterLine(256, 120, 264, 128), jitterLine(264, 120, 256, 128),
+  jitterLine(238, 150, 250, 143).concat(jitterLine(250, 143, 262, 150))
+];
+// 错误计分横线
+var tickPts = [], tickCross = [];
+(function () {
+  for (var i = 0; i < 6; i++) {
+    var x = 340 + i * 21;
+    tickPts.push(jitterLine(x, 28, x, 46));
+    tickCross.push(jitterLine(x - 6, 40, x + 6, 27));
+  }
+})();
+
+// ============ 回合几何（开局生成一次） ============
+var rGeo = { x0: 0, cellW: 40, gap: 9, yLine: 505 };
+var underlinePts = [], chipPts = [];
+function buildRoundGeometry() {
+  var n = word.length;
+  var cellW = Math.min(44, (W - 50) / n), gap = 9;
+  var total = n * cellW + (n - 1) * gap;
+  rGeo = { x0: (W - total) / 2, cellW: cellW, gap: gap, yLine: 505 };
+  underlinePts = [];
+  for (var i = 0; i < n; i++) {
+    var x = rGeo.x0 + i * (cellW + gap);
+    underlinePts.push(jitterLine(x + 3, rGeo.yLine, x + cellW - 3, rGeo.yLine));
+  }
+  var cw = wordCat.length * 10 + 58;
+  var cx = W / 2;
+  chipPts = [
+    jitterLine(cx - cw / 2, 22, cx + cw / 2, 22),
+    jitterLine(cx + cw / 2, 22, cx + cw / 2, 52),
+    jitterLine(cx + cw / 2, 52, cx - cw / 2, 52),
+    jitterLine(cx - cw / 2, 52, cx - cw / 2, 22)
+  ];
+}
+
+// ============ 粉笔灰粒子 ============
+var dust = [];
+function spawnDust(x, y, n) {
+  for (var i = 0; i < n; i++) {
+    dust.push({ x: x + rnd(-7, 7), y: y + rnd(-5, 5), vx: rnd(-16, 16), vy: rnd(-46, -6), life: rnd(0.4, 0.9), s: rnd(1, 2.6) });
+  }
+}
+function updateDust(dt) {
+  for (var i = dust.length - 1; i >= 0; i--) {
+    var d = dust[i];
+    d.life -= dt;
+    if (d.life <= 0) { dust.splice(i, 1); continue; }
+    d.x += d.vx * dt; d.y += d.vy * dt; d.vy += 140 * dt;
+  }
+}
+function drawDust(c) {
+  for (var i = 0; i < dust.length; i++) {
+    var d = dust[i];
+    c.globalAlpha = Math.max(0, Math.min(1, d.life));
+    c.fillStyle = "rgba(" + CHALK + ",.8)";
+    c.fillRect(d.x, d.y, d.s, d.s);
+  }
+  c.globalAlpha = 1;
+}
+
+// ============ 音效（WebAudio 合成） ============
+var actx = null;
+function unlockAudio() {
+  try {
+    if (!actx) actx = new (window.AudioContext || window.webkitAudioContext)();
+    if (actx.state === "suspended") actx.resume();
+  } catch (e) {}
+}
+function beep(freq, dur, type, gainv, delay) {
+  if (muted) return;
+  try {
+    if (!actx) actx = new (window.AudioContext || window.webkitAudioContext)();
+    if (actx.state === "suspended") actx.resume();
+    var t0 = actx.currentTime + (delay || 0);
+    var o = actx.createOscillator(), g = actx.createGain();
+    o.type = type || "sine"; o.frequency.value = freq;
+    g.gain.setValueAtTime(gainv || 0.12, t0);
+    g.gain.exponentialRampToValueAtTime(0.001, t0 + dur);
+    o.connect(g); g.connect(actx.destination);
+    o.start(t0); o.stop(t0 + dur);
+  } catch (e) {}
+}
+function sHit(n) { beep(523 + n * 60, 0.14, "triangle", 0.1); beep(784 + n * 60, 0.1, "sine", 0.05, 0.06); }
+function sMiss() { beep(150, 0.2, "square", 0.08); beep(110, 0.25, "sawtooth", 0.06, 0.1); }
+function sWin() { beep(523, 0.12, "triangle", 0.1); beep(659, 0.12, "triangle", 0.1, 0.1); beep(784, 0.16, "triangle", 0.1, 0.2); beep(1047, 0.3, "sine", 0.08, 0.32); }
+function sLose() { beep(220, 0.25, "sawtooth", 0.08); beep(180, 0.25, "sawtooth", 0.08, 0.18); beep(140, 0.4, "sawtooth", 0.08, 0.36); }
+function sClick() { beep(700, 0.04, "sine", 0.04); }
+
+// ============ 屏幕键盘 ============
+var keys = {};
+function buildKbd() {
+  keys = {};
+  if (!kbdEl) return;
+  kbdEl.innerHTML = "";
+  var rows = ["QWERTYUIOP", "ASDFGHJKL", "ZXCVBNM"];
+  for (var r = 0; r < rows.length; r++) {
+    var row = document.createElement("div");
+    row.className = "krow";
+    for (var i = 0; i < rows[r].length; i++) {
+      var up = rows[r].charAt(i);
+      var b = document.createElement("button");
+      b.className = "key";
+      b.textContent = up;
+      b.setAttribute("data-k", up);
+      (function (low, btn) {
+        btn.addEventListener("click", function () { unlockAudio(); guess(low); });
+      })(up.toLowerCase(), b);
+      row.appendChild(b);
+      keys[up] = b;
+    }
+    kbdEl.appendChild(row);
+  }
+}
+function lockKey(low, hit) {
+  var b = keys[low.toUpperCase()];
+  if (!b) return;
+  b.disabled = true;
+  b.className = "key " + (hit ? "hit" : "miss");
+}
+
+// ============ 游戏流程 ============
+function updateHud() {
+  scoreEl.textContent = String(score);
+  streakEl.textContent = String(streak);
+  bestEl.textContent = String(best);
+}
+function startRound(t) {
+  tier = t;
+  var e = bags[t].draw();
+  word = e.w; wordCat = CATS[e.c] || e.c.toUpperCase(); wordGloss = e.g;
+  revealed = []; missedReveal = [];
+  for (var i = 0; i < word.length; i++) { revealed.push({ on: false, rot: rnd(-0.06, 0.06) }); missedReveal.push(false); }
+  guessed = {}; misses = 0;
+  buildRoundGeometry();
+  buildKbd();
+  state = "PLAY";
+  overlay.style.display = "none";
+}
+function startRun(t) {
+  score = 0; streak = 0; lastGain = 0;
+  bestAtRunStart = best; newBestRun = false; runActive = true;
+  lastTier = t;
+  updateHud();
+  startRound(t);
+  // 平台埋点：一局开始
+  try {
+    if (window.__portal === "crazygames" && window.CrazyGames && window.CrazyGames.SDK) {
+      window.CrazyGames.SDK.game.gameplayStart();
+    }
+  } catch (e) {}
+}
+function allRevealed() {
+  for (var i = 0; i < revealed.length; i++) if (!revealed[i].on) return false;
+  return true;
+}
+function winWord() {
+  var base = (6 - misses) * 100 + word.length * 20;
+  streak++;
+  var mult = streak >= 3 ? 1.5 : 1;
+  lastGain = Math.round(base * mult);
+  score += lastGain;
+  if (streak > bestStreak) { bestStreak = streak; try { localStorage.setItem("wg_streak", String(bestStreak)); } catch (e) {} }
+  if (score > best) { best = score; try { localStorage.setItem("wg_best", String(best)); } catch (e) {} }
+  updateHud();
+  state = "WON";
+  showWin();
+  sWin();
+}
+function endRun() {
+  if (!runActive) return;
+  runActive = false;
+  newBestRun = score > bestAtRunStart && score > 0;
+  if (score > best) { best = score; try { localStorage.setItem("wg_best", String(best)); } catch (e) {} }
+  streak = 0;
+  updateHud();
+  // 平台埋点：一局结束
+  try {
+    if (window.__portal === "crazygames" && window.CrazyGames && window.CrazyGames.SDK) {
+      window.CrazyGames.SDK.game.gameplayStop();
+      if (newBestRun) window.CrazyGames.SDK.game.happytime();
+    }
+  } catch (e) {}
+}
+function loseWord() {
+  for (var i = 0; i < word.length; i++) {
+    if (!revealed[i].on) { revealed[i].on = true; missedReveal[i] = true; }
+  }
+  loseT = now();
+  state = "LOST";
+  endRun();
+  showLose();
+  sLose();
+}
+function guess(ch) {
+  if (state !== "PLAY") return false;
+  ch = String(ch).toLowerCase();
+  if (!/^[a-z]$/.test(ch)) return false;
+  if (guessed[ch]) return false;           // 重复猜同一字母：忽略
+  guessed[ch] = true;
+  var hit = false, cnt = 0, i;
+  for (i = 0; i < word.length; i++) {
+    if (word.charAt(i) === ch) { revealed[i].on = true; hit = true; cnt++; }
+  }
+  if (hit) {
+    lockKey(ch, true);
+    for (i = 0; i < revealed.length; i++) {
+      if (revealed[i].on && word.charAt(i) === ch) {
+        spawnDust(rGeo.x0 + i * (rGeo.cellW + rGeo.gap) + rGeo.cellW / 2, rGeo.yLine - 10, 4);
+      }
+    }
+    sHit(cnt);
+    if (allRevealed()) winWord();
+  } else {
+    lockKey(ch, false);
+    misses++;
+    var pts = figureStrokes()[misses - 1];
+    strokes.push({ pts: pts, t0: now() });
+    var tail = pts[pts.length - 1];
+    spawnDust(tail[0], tail[1], 8);
+    sMiss();
+    if (misses >= 6) loseWord();
+  }
+  return hit;
+}
+
+// ============ 覆盖层面板 ============
+function showMenu() {
+  state = "MENU";
+  overlay.style.display = "flex";
+  panel.innerHTML =
+    '<h2>WORD GALLOWS</h2>' +
+    '<p>Guess the hidden word letter by letter.<br>Six wrong guesses and the chalk figure is finished.</p>' +
+    '<button class="big" data-action="start" data-tier="0">EASY &middot; 4&ndash;5 LETTERS</button>' +
+    '<button class="big" data-action="start" data-tier="1">MEDIUM &middot; 6&ndash;8 LETTERS</button>' +
+    '<button class="big" data-action="start" data-tier="2">HARD &middot; 9&ndash;12 LETTERS</button>' +
+    '<p class="mini">BEST RUN ' + best + ' &middot; LONGEST STREAK ' + bestStreak + '</p>';
+}
+function showWin() {
+  overlay.style.display = "flex";
+  panel.innerHTML =
+    '<h2>CORRECT!</h2>' +
+    '<p class="wordLine">' + word.toUpperCase() + ' <span class="cat">&middot; ' + wordCat + '</span></p>' +
+    '<p class="gloss">' + wordGloss + '</p>' +
+    '<div class="final">+' + lastGain + '</div>' +
+    '<p class="mini">' + (streak >= 3 ? 'STREAK ' + streak + ' &mdash; SCORE &times;1.5' : 'STREAK ' + streak) + '</p>' +
+    '<button class="big" data-action="next">NEXT WORD</button>';
+}
+function showLose() {
+  overlay.style.display = "flex";
+  panel.innerHTML =
+    '<h2>GAME OVER</h2>' +
+    '<p class="wordLine">The word was ' + word.toUpperCase() + ' <span class="cat">&middot; ' + wordCat + '</span></p>' +
+    '<p class="gloss">' + wordGloss + '</p>' +
+    '<div class="final">' + score + '</div>' +
+    '<p class="mini">' + (newBestRun ? 'NEW BEST RUN!' : 'BEST RUN ' + best) + '</p>' +
+    '<button class="big" data-action="again">PLAY AGAIN</button>' +
+    '<button class="big" data-action="menu">MENU</button>';
+}
+overlay.addEventListener("click", function (e) {
+  var el = e.target;
+  while (el && el !== overlay && !(el.getAttribute && el.getAttribute("data-action"))) el = el.parentNode;
+  if (!el || el === overlay) return;
+  unlockAudio();
+  var act = el.getAttribute("data-action");
+  var t = parseInt(el.getAttribute("data-tier") || "0", 10);
+  if (act === "start") startRun(t);
+  else if (act === "next") startRound(tier);
+  else if (act === "again") startRun(tier);
+  else if (act === "menu") showMenu();
+});
+menuBtn.addEventListener("click", function () {
+  sClick();
+  if (state === "PLAY" || state === "WON") endRun();
+  showMenu();
+});
+function toggleMute() {
+  muted = !muted;
+  try { localStorage.setItem("wg_mute", muted ? "1" : "0"); } catch (e) {}
+  muteBtn.textContent = muted ? "SOUND OFF" : "SOUND ON";
+  if (!muted) { unlockAudio(); sClick(); }
+}
+muteBtn.addEventListener("click", toggleMute);
+muteBtn.textContent = muted ? "SOUND OFF" : "SOUND ON";
+
+// 桌面键盘 A-Z + Enter
+document.addEventListener("keydown", function (e) {
+  if (e.metaKey || e.ctrlKey || e.altKey) return;
+  if (e.key && e.key.length === 1 && /[a-zA-Z]/.test(e.key)) {
+    if (state === "PLAY") { e.preventDefault(); guess(e.key); }
+  } else if (e.key === "Enter") {
+    if (state === "MENU") { unlockAudio(); startRun(lastTier); }
+    else if (state === "WON") startRound(tier);
+    else if (state === "LOST") startRun(tier);
+  }
+});
+// 触屏：阻止画布上的默认手势
+canvas.addEventListener("touchstart", function (e) { e.preventDefault(); }, { passive: false });
+canvas.addEventListener("touchmove", function (e) { e.preventDefault(); }, { passive: false });
+
+// ============ 渲染 ============
+var strokes = [];   // 已画出的笔画 {pts, t0}
+function render(t) {
+  ctx.drawImage(off, 0, 0, W, H);
+  var c = ctx, i;
+  if (state === "MENU") {
+    for (i = 0; i < GALLOWS.length; i++) strokeChalk(c, GALLOWS[i]);
+    for (i = 0; i < MENUFIG.length; i++) strokeChalk(c, MENUFIG[i]);
+    drawDust(c);
+    return;
+  }
+  // 提示框
+  for (i = 0; i < chipPts.length; i++) strokeChalk(c, chipPts[i]);
+  c.fillStyle = "rgba(" + CHALK + ",.85)";
+  c.font = "13px Georgia, serif";
+  c.textAlign = "center"; c.textBaseline = "alphabetic";
+  c.fillText("HINT: " + wordCat, W / 2, 41);
+  // 错误计数
+  c.textAlign = "left";
+  c.fillText("MISSES " + misses + "/6", 26, 41);
+  for (i = 0; i < 6; i++) {
+    strokeChalk(c, tickPts[i]);
+    if (i < misses) strokeChalk(c, tickCross[i]);
+  }
+  // 连胜加成提示
+  if (streak >= 3) {
+    c.fillStyle = "rgba(240,220,130,.9)";
+    c.textAlign = "center";
+    c.fillText("STREAK x1.5 ACTIVE", W / 2, 68);
+  }
+  // 绞架
+  for (i = 0; i < GALLOWS.length; i++) strokeChalk(c, GALLOWS[i]);
+  // 小人（描画动画）
+  for (i = 0; i < strokes.length; i++) {
+    var p = Math.min(1, (t - strokes[i].t0) / 480);
+    strokeChalk(c, strokes[i].pts, p);
+  }
+  // 失败表情
+  if (state === "LOST") {
+    var fp = Math.min(1, (t - loseT) / 300);
+    for (i = 0; i < FACE.length; i++) strokeChalk(c, FACE[i], fp);
+  }
+  // 单词下划线格与字母
+  var n = word.length;
+  for (i = 0; i < n; i++) {
+    strokeChalk(c, underlinePts[i]);
+    if (revealed[i].on) {
+      var cx = rGeo.x0 + i * (rGeo.cellW + rGeo.gap) + rGeo.cellW / 2;
+      c.save();
+      c.translate(cx, rGeo.yLine - 12);
+      c.rotate(revealed[i].rot);
+      c.fillStyle = missedReveal[i] ? "rgba(235,160,150,.95)" : "rgba(" + CHALK + ",.95)";
+      c.font = "700 " + Math.round(rGeo.cellW * 0.72) + "px Georgia, serif";
+      c.textAlign = "center"; c.textBaseline = "alphabetic";
+      c.fillText(word.charAt(i).toUpperCase(), 0, 0);
+      c.restore();
+    }
+  }
+  drawDust(c);
+}
+var last = 0;
+function frame(t) {
+  var dt = Math.min((t - last) / 1000, 0.05);
+  last = t;
+  updateDust(dt);
+  render(t);
+  requestAnimationFrame(frame);
+}
+
+// ============ 启动 ============
+buildKbd();
+updateHud();
+showMenu();
+requestAnimationFrame(frame);
+
+// 调试/测试钩子（不影响游戏逻辑）
+window.__wg = {
+  guess: guess, startRun: startRun, startRound: startRound, endRun: endRun, showMenu: showMenu, toggleMute: toggleMute,
+  get state() { return state; }, get score() { return score; }, get streak() { return streak; },
+  get misses() { return misses; }, get word() { return word; }, get guessed() { return guessed; },
+  get best() { return best; }, get bestStreak() { return bestStreak; },
+  get TIERS() { return TIERS; }, get CATS() { return CATS; }
+};
+</script>
+</body>
+</html>
